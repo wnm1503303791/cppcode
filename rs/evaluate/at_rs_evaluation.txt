@@ -1,0 +1,3 @@
+all:28702
+target:2051
+targeting rate:0.484183
