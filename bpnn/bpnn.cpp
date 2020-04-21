@@ -1,3 +1,12 @@
+/*************************************************************************
+	> File Name: bpnn.cpp
+	> Author: tuzhuo
+	> Mail: xmb028@163.com 
+	> Created Time: Tue 21 Apr 2020 09:25:34 PM CST
+ ************************************************************************/
+
+//自己造轮子用全连接神经网络解决fizzbuzz问题 
+
 #include<cstdio>
 #include<cstring>
 #include<algorithm>
@@ -26,7 +35,8 @@ int T,n,m;
 //以下超参数可以自己改变
 const int N_data_length = 10;//输入数据的向量长度 
 const int N_hidden_neuron = 600;//隐藏层神经元数目 
-const int N_training_data = 300; 
+const int N_training_data = 400;
+const double random_rate = 15351.7;//自定义随机数种子 
 const double lr = 0.00001;
 
 
@@ -103,6 +113,7 @@ void save_training_data(int source_data[N_training_data][N_data_length],int labe
 	fstream training_data_file("training_data.csv", ios::out);
 	for(int i=0;i<N_training_data;i++)
 	{
+		training_data_file<<i+i<<" ";
 		for(int j=0;j<N_data_length;j++)
 		{
 			training_data_file<<source_data[i][j];
@@ -139,9 +150,9 @@ public:
 	{
 		for(int i=0;i<N_data_length;i++)
 		{
-			weight[i]=random(17351.7);//7是质数 
+			weight[i]=random(random_rate);
 		}
-		biase=random(17351.7);//31是质数 
+		biase=random(random_rate);
 		
 		return ;
 		
@@ -211,7 +222,7 @@ public:
 			{
 				for(int j=0;j<N_hidden_neuron;j++)
 				{
-					hidden_layer_outputs<< hidden_layer_outputs_data[i][j] <<" ";
+					hidden_layer_outputs<<hidden_layer_outputs_data[i][j] <<" ";
 				}
 				hidden_layer_outputs<<endl;
 			}
@@ -240,9 +251,9 @@ public:
 	{
 		for(int i=0;i<N_hidden_neuron;i++)
 		{
-			weight[i]=random(17351.7);//7是质数 
+			weight[i]=random(random_rate);
 		}
-		biase=random(17351.7);//31是质数 
+		biase=random(random_rate);//31是质数 
 		
 		return ;
 		
@@ -256,7 +267,7 @@ public:
 		}
 		result+=this->biase;
 		//ReLU
-		//应该使用softmax或者sigmoid 
+		//后续激活应该使用softmax或者sigmoid函数 
 		if(result > eps)
 			return result;
 		else
@@ -325,9 +336,10 @@ public:
 			fstream output_layer_outputs("output_layer_outputs.csv", ios::out);
 			for(int i=0;i<N_training_data;i++)//打印每个数据在每个神经元的输出 
 			{
+				output_layer_outputs<<1+i<<" ";
 				for(int j=0;j<4;j++)
 				{
-					output_layer_outputs<< output_layer_outputs_data[i][j] <<" ";
+					output_layer_outputs<<" "<< output_layer_outputs_data[i][j] <<" ";
 				}
 				output_layer_outputs<<endl;
 			}
@@ -336,10 +348,71 @@ public:
 		return ;
 		
 	}
+	//使用均方误差做损失函数，这里的output_layer_outputs是已经被softmax过的 
+	void predict_loss_function(int training_label[N_training_data][4],double output_layer_outputs[N_training_data][4],double loss[N_training_data],bool save_loss=false)
+	{
+		double sum=0;
+		for(int i=0;i<N_training_data;i++)
+		{
+			for(int j=0;j<4;j++)
+			{
+				loss[i]+=pow(abs(training_label[i][j]-output_layer_outputs[i][j]),2);
+			}
+			sum+=loss[i];
+		}
+		cout<<"total loss in this epoch is : "<<sum<<endl;
+		
+		if(save_loss)
+		{
+			fstream loss_file("loss.csv", ios::out);
+			for(int i=0;i<N_training_data;i++)
+			{
+				loss_file<<1+i<<" ";
+				for(int j=0;j<4;j++)
+				{
+					loss_file<<training_label[i][j];
+					if(j<3)
+						loss_file<<",";
+				}
+				loss_file<<" ";
+				for(int j=0;j<4;j++)
+				{
+					loss_file<<output_layer_outputs[i][j];
+					if(j<3)
+						loss_file<<",";
+				}
+				loss_file<<" "<<loss[i]<<endl;
+			}
+		}
+		
+		return ;
+	}
 };
 
 
 
+
+
+
+
+double correct_rate(int training_label[N_training_data][4],double output_layer_outputs[N_training_data][4])
+{
+	double count=0;
+	for(int i=0;i<N_training_data;i++)
+	{
+		int index=0;
+		for(int j=1;j<4;j++)
+		{
+			if(output_layer_outputs[i][j] > output_layer_outputs[i][index])//softmax回归 
+			{
+				index=j;
+			}
+		}
+		if(training_label[i][index]==1)
+			count++;
+	}
+	return count/N_training_data;
+}
 
 
 
@@ -351,11 +424,12 @@ public:
 
 int main()
 {	
+	/*
 	for(int i=0;i<10;i++)
 	{
-		cout<<random(17351.7)<<endl;
+		cout<<random(random_rate)<<endl;
 	}
-
+	*/
 	int training_data[N_training_data][N_data_length];
 	int training_label[N_training_data][4];//[0,fizz,buzz,fizzbuzz]
 	data_process(training_data,training_label,1/*数据起始点*/);
@@ -368,7 +442,10 @@ int main()
 	output_layer *fizz_buzz_output_layer = new output_layer(hidden_layer_outputs);
 	double output_layer_outputs[N_training_data][4];
 	fizz_buzz_output_layer->forward_propagation(output_layer_outputs,true,true);
+	double loss[N_training_data];
+	fizz_buzz_output_layer->predict_loss_function(training_label,output_layer_outputs,loss,true);
 	
+	cout<<"correct_rate : "<<correct_rate(training_label,output_layer_outputs)<<endl;
 	
 	return 0;
 }
