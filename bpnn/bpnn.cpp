@@ -301,11 +301,11 @@ public:
 				double sum=0;
 				for(int j=0;j<4;j++)
 				{
-					sum+=output_layer_outputs_data[i][j];
+					sum+=exp(output_layer_outputs_data[i][j]);
 				}
 				for(int j=0;j<4;j++)
 				{
-					output_layer_outputs_data[i][j] = output_layer_outputs_data[i][j]/sum;
+					output_layer_outputs_data[i][j] = exp(output_layer_outputs_data[i][j])/sum;
 				}
 			}
 		}
