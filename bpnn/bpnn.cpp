@@ -6,6 +6,7 @@
  ************************************************************************/
 
 //自己造轮子用全连接神经网络解决fizzbuzz问题 
+//后续需要加上batch_normalization,L2正则化,多种SGD策略 
 
 #include<cstdio>
 #include<cstring>
@@ -36,8 +37,9 @@ int T,n,m;
 const int N_data_length = 10;//输入数据的向量长度 
 const int N_hidden_neuron = 600;//隐藏层神经元数目 
 const int N_training_data = 400;
-const double random_rate = 15351.7;//自定义随机数种子 
-const double lr = 0.00001;
+const double random_rate = 17371.7;//自定义随机数种子 
+const double lr = 0.1;//学习率 
+const int epoch = 5;//学习迭代次数 
 
 
 
@@ -179,6 +181,16 @@ public:
 	{
 		return biase;
 	}
+	void update_weight(double gradient[N_data_length])
+	{
+		for(int i=0;i<N_data_length;i++)
+		{
+			weight[i] -= lr * gradient[i];
+		}
+		
+		return ;
+		
+	}
 };
 
 class hidden_layer{
@@ -231,7 +243,52 @@ public:
 		return ;
 		
 	}
+	void backward_propagation(int data_index,double output_layer_gradients[4][N_hidden_neuron],bool save_gradient=false)
+	{
+		double hidden_layer_loss[N_hidden_neuron];
+		for(int i=0;i<N_hidden_neuron;i++)
+			hidden_layer_loss[i]=0;
+		for(int i=0;i<N_hidden_neuron;i++)//输出层传播过来的梯度是4个输出神经元的计算结果
+		{
+			for(int j=0;j<4;j++)
+			{
+				hidden_layer_loss[i] += output_layer_gradients[j][i];//hidden_layer_loss=sum(output_layer_gradient)
+			}
+		}
+		
+		double hidden_layer_gradient[N_hidden_neuron][N_data_length];
+		for(int i=0;i<N_hidden_neuron;i++)//求每个隐藏层神经元的参数梯度 
+		{
+			for(int j=0;j<N_data_length;j++)
+			{
+				hidden_layer_gradient[i][j] = hidden_layer_loss[i] * this->input_data_set[data_index][j];
+			}
+		}
+		//更新每个隐藏层神经元的参数向量 
+		for(int i=0;i<N_hidden_neuron;i++)
+		{
+			hidden_neurons[i].update_weight(hidden_layer_gradient[i]);
+		}
+		
+		if(save_gradient)
+		{
+			fstream hidden_layer_gradient_file("hidden_layer_gradient.csv", ios::out);
+			for(int i=0;i<N_hidden_neuron;i++)
+			{
+				for(int j=0;j<N_data_length;j++)
+				{
+					hidden_layer_gradient_file<<hidden_layer_gradient[i][j]<<" ";
+				}
+				hidden_layer_gradient_file<<endl;
+			}
+		}
+		
+		return ;
+		
+	}
 };
+
+
 
 
 
@@ -244,7 +301,7 @@ public:
 //之所以在这里将隐藏层和输出层分开来定义是因为c++不方便data.append()
 class Neuron_output{
 private:
-	double weight[N_hidden_neuron];
+	double weight[N_hidden_neuron];//隐藏层有多少个神经元，则输出层神经元的权重参数向量的维度就是多少 
 	double biase;
 public:
 	Neuron_output()
@@ -280,6 +337,16 @@ public:
 	double get_biase()
 	{
 		return biase;
+	}
+	void update_weight(double gradient[N_hidden_neuron])
+	{
+		for(int i=0;i<N_hidden_neuron;i++)
+		{
+			weight[i] -= lr * gradient[i];
+		}
+		
+		return ;
+		
 	}
 };
 
@@ -349,16 +416,18 @@ public:
 		
 	}
 	//使用均方误差做损失函数，这里的output_layer_outputs是已经被softmax过的 
-	void predict_loss_function(int training_label[N_training_data][4],double output_layer_outputs[N_training_data][4],double loss[N_training_data],bool save_loss=false)
+	void predict_loss_function(int training_label[N_training_data][4],double output_layer_outputs[N_training_data][4],double loss[N_training_data][4],bool save_loss=false)
 	{
 		double sum=0;
+		double each_data_total_loss[N_training_data];
 		for(int i=0;i<N_training_data;i++)
 		{
 			for(int j=0;j<4;j++)
 			{
-				loss[i]+=pow(abs(training_label[i][j]-output_layer_outputs[i][j]),2);
+				each_data_total_loss[i]+=pow(abs(training_label[i][j]-output_layer_outputs[i][j]),2);
+				loss[i][j] = abs(training_label[i][j]-output_layer_outputs[i][j]);
 			}
-			sum+=loss[i];
+			sum+=each_data_total_loss[i];
 		}
 		cout<<"total loss in this epoch is : "<<sum<<endl;
 		
@@ -381,11 +450,63 @@ public:
 					if(j<3)
 						loss_file<<",";
 				}
-				loss_file<<" "<<loss[i]<<endl;
+				loss_file<<" "<<each_data_total_loss[i]<<endl;
 			}
 		}
 		
 		return ;
+		
+	}
+	double correct_rate(int training_label[N_training_data][4],double output_layer_outputs[N_training_data][4])
+	{
+		double count=0;
+		for(int i=0;i<N_training_data;i++)
+		{
+			int index=0;
+			for(int j=1;j<4;j++)
+			{
+				if(output_layer_outputs[i][j] > output_layer_outputs[i][index])//softmax回归 
+				{
+					index=j;
+				}
+			}
+			if(training_label[i][index]==1)
+				count++;
+		}
+		
+		return count/N_training_data;
+		
+	}
+	void backward_propagation(int data_index,double loss[4],double output_layer_gradients[4][N_hidden_neuron],bool save_gradient=false)
+	{
+		//暂时还不会对softmax求梯度...就用loss替代了 
+		for(int i=0;i<4;i++)
+		{
+			for(int j=0;j<N_hidden_neuron;j++)
+			{
+				output_layer_gradients[i][j] = loss[i] * this->input_data_set[data_index][j];
+			}
+		}
+		//直接把本层的参数更新
+		for(int i=0;i<4;i++)
+		{
+			output_neurons[i].update_weight(output_layer_gradients[i]);
+		}
+		if(save_gradient)
+		{
+			fstream output_layer_gradient("output_layer_gradient.csv", ios::out);
+			for(int i=0;i<4;i++)
+			{
+				for(int j=0;j<N_hidden_neuron;j++)
+				{
+					output_layer_gradient<<output_layer_gradients[i][j]<<" ";
+				}
+				output_layer_gradient<<endl;
+			}
+		}
+		
+		return ;
+		
 	}
 };
 
@@ -394,25 +515,6 @@ public:
 
 
 
-
-double correct_rate(int training_label[N_training_data][4],double output_layer_outputs[N_training_data][4])
-{
-	double count=0;
-	for(int i=0;i<N_training_data;i++)
-	{
-		int index=0;
-		for(int j=1;j<4;j++)
-		{
-			if(output_layer_outputs[i][j] > output_layer_outputs[i][index])//softmax回归 
-			{
-				index=j;
-			}
-		}
-		if(training_label[i][index]==1)
-			count++;
-	}
-	return count/N_training_data;
-}
 
 
 
@@ -437,15 +539,39 @@ int main()
 	
 	hidden_layer *fizz_buzz_hidden_layer = new hidden_layer(training_data);
 	double hidden_layer_outputs[N_training_data][N_hidden_neuron];
-	fizz_buzz_hidden_layer->forward_propagation(hidden_layer_outputs,true);
+	fizz_buzz_hidden_layer -> forward_propagation(hidden_layer_outputs,true);
 	
 	output_layer *fizz_buzz_output_layer = new output_layer(hidden_layer_outputs);
 	double output_layer_outputs[N_training_data][4];
-	fizz_buzz_output_layer->forward_propagation(output_layer_outputs,true,true);
-	double loss[N_training_data];
-	fizz_buzz_output_layer->predict_loss_function(training_label,output_layer_outputs,loss,true);
+	fizz_buzz_output_layer -> forward_propagation(output_layer_outputs,true,true);
+	double loss[N_training_data][4];//此loss用于反向传播 
+	fizz_buzz_output_layer -> predict_loss_function(training_label,output_layer_outputs,loss,true);
+	cout<<"correct_rate : "<<fizz_buzz_output_layer -> correct_rate(training_label,output_layer_outputs)<<endl;
 	
-	cout<<"correct_rate : "<<correct_rate(training_label,output_layer_outputs)<<endl;
+	//按照每个training data做反向传播、梯度下降、权重更新 
+	for(int i=0;i<N_training_data;i++)
+	{
+		double output_layer_gradients[4][N_hidden_neuron];//每个输出层神经元的参数规模为[N_hidden_neuron]，仅保存输出层梯度即可，因为隐藏层不需要再反向传播了 
+		fizz_buzz_output_layer -> backward_propagation(i,loss[i],output_layer_gradients,true);
+		//输出层的梯度反向传播到隐藏层
+		fizz_buzz_hidden_layer -> backward_propagation(i,output_layer_gradients);
+	}
+	
+	//training ! 
+	for(int e=0;e<epoch;e++)
+	{
+		fizz_buzz_hidden_layer -> forward_propagation(hidden_layer_outputs,true);
+		fizz_buzz_output_layer -> forward_propagation(output_layer_outputs,true,true);
+		fizz_buzz_output_layer -> predict_loss_function(training_label,output_layer_outputs,loss,true);
+		cout<<"correct_rate : "<<fizz_buzz_output_layer -> correct_rate(training_label,output_layer_outputs)<<endl;
+		for(int i=0;i<N_training_data;i++)
+		{
+			double output_layer_gradients[4][N_hidden_neuron];//每个输出层神经元的参数规模为[N_hidden_neuron]，仅保存输出层梯度即可，因为隐藏层不需要再反向传播了 
+			fizz_buzz_output_layer -> backward_propagation(i,loss[i],output_layer_gradients,true);
+			//输出层的梯度反向传播到隐藏层
+			fizz_buzz_hidden_layer -> backward_propagation(i,output_layer_gradients,true);
+		}
+	}
 	
 	return 0;
 }
