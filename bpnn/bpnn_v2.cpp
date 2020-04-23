@@ -36,10 +36,10 @@ int T,n,m;
 //以下超参数可以自己改变
 const int N_data_length = 10;//输入数据的向量长度 
 const int N_hidden_neuron = 600;//隐藏层神经元数目 
-const int N_training_data = 400;
-const double random_rate = 17371.7;//自定义随机数种子 
+const int N_training_data = 400;//训练数据量 
+const double random_rate = 15371.7;//自定义随机数种子 
 const double lr = 0.0001;//学习率 
-const int epoch = 5;//学习迭代次数 
+const int epoch = 2;//学习迭代次数 
 
 
 
@@ -115,7 +115,7 @@ void save_training_data(int source_data[N_training_data][N_data_length],int labe
 	fstream training_data_file("training_data.csv", ios::out);
 	for(int i=0;i<N_training_data;i++)
 	{
-		training_data_file<<i+i<<" ";
+		training_data_file<<i<<" ";
 		for(int j=0;j<N_data_length;j++)
 		{
 			training_data_file<<source_data[i][j];
@@ -572,7 +572,7 @@ int main()
 		fizz_buzz_hidden_layer -> backward_propagation(i,output_layer_gradients,true);
 	}
 	
-	return 0;
+	//return 0;
 	
 	//training ! 
 	for(int e=0;e<epoch;e++)
